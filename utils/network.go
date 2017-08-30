@@ -347,7 +347,7 @@ func DoNetworking(args *skel.CmdArgs, conf NetConf, result *current.Result, logg
         netlink.TcU32Key{
                         Mask:    0x00000000,
                         Val:     0x00000000,
-                        Off:     12,
+                        Off:     16,
                         OffMask: 0,
                 },
         }
@@ -376,7 +376,7 @@ func DoNetworking(args *skel.CmdArgs, conf NetConf, result *current.Result, logg
         netlink.TcU32Key{
                         Mask:    0x00000000,
                         Val:     0x00000000,
-                        Off:     16,
+                        Off:     12,
                         OffMask: 0,
                 },
         }
