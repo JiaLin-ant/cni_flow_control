@@ -22,6 +22,24 @@ func DoNetworking(args *skel.CmdArgs, conf NetConf, result *current.Result, logg
 	hostVethName = "cali" + args.ContainerID[:Min(11, len(args.ContainerID))]
 	contVethName := args.IfName
 	var hasIPv4, hasIPv6 bool
+        Rate1, err := strconv.Atoi(ingress_bandwidth)
+                if err != nil {
+                 fmt.Println("convert fail")
+         }
+                if Rate1<0 {
+                        fmt.Println("rate1 error")
+                }
+
+             Rate2, err := strconv.Atoi(egress_bandwidth)
+                if err != nil {
+                 fmt.Println("convert fail")
+
+                              }
+                if Rate2<0 {
+                        fmt.Println("rate2 error")
+                }
+
+
 
 	// If a desired veth name was passed in, use that instead.
 	if desiredVethName != "" {
@@ -136,9 +154,28 @@ func DoNetworking(args *skel.CmdArgs, conf NetConf, result *current.Result, logg
 				hasIPv6 = true
 			}
 		}
+               
+                /*Rate1, err := strconv.Atoi(ingress_bandwidth)
+                if err != nil {
+                 fmt.Println("convert fail")
+         }
+                if Rate1<0 {
+                        fmt.Println("rate1 error")
+                }
 
-       /*         index := contVeth.Attrs().Index
-		qdiscHandle := netlink.MakeHandle(0x2, 0x0)
+             Rate2, err := strconv.Atoi(egress_bandwidth)
+                if err != nil {
+                 fmt.Println("convert fail")
+
+                              }
+                if Rate2<0 {
+                        fmt.Println("rate2 error")
+                }
+
+*/
+
+                index := contVeth.Attrs().Index
+		qdiscHandle := netlink.MakeHandle(0x1, 0x0)
         qdiscAttrs := netlink.QdiscAttrs{
                 LinkIndex: index,
                 Handle:    qdiscHandle,
@@ -148,17 +185,6 @@ func DoNetworking(args *skel.CmdArgs, conf NetConf, result *current.Result, logg
         if err := netlink.QdiscAdd(qdisc); err != nil {
                 fmt.Println("add qdisc err")
         }
-        qdiscs, err := netlink.QdiscList(contVeth)
-        if err != nil {
-                fmt.Println("list qdisc err")
-        }
-        if len(qdiscs) != 1 {
-                fmt.Println("Failed to add qdisc")
-        }
-        _, ok := qdiscs[0].(*netlink.Htb)
-        if !ok {
-                fmt.Println("Qdisc is the wrong type")
-        }
 
         classId := netlink.MakeHandle(0x1, 0x66cb)
         classAttrs := netlink.ClassAttrs{
@@ -167,24 +193,12 @@ func DoNetworking(args *skel.CmdArgs, conf NetConf, result *current.Result, logg
                 Handle:    classId,
         }
         htbClassAttrs := netlink.HtbClassAttrs{
-                Rate:   500 * 1024,
-                Buffer: 32 * 1024,
+                Rate:   uint64(Rate2),
+                Buffer: 320000 * 1024,
         }
         htbClass := netlink.NewHtbClass(classAttrs, htbClassAttrs)
         if err = netlink.ClassReplace(htbClass); err != nil {
                 fmt.Println("Failed to add a HTB class: %v", err)
-        }
-        classes, err := netlink.ClassList(contVeth, qdiscHandle)
-        if err != nil {
-                fmt.Println("list class err")
-        }
-         if len(classes) != 1 {
-                fmt.Println("Failed to add class")
-                fmt.Println("length of classes is : %v",len(classes))
-        }
-        _, ok = classes[0].(*netlink.HtbClass)
-        if !ok {
-                fmt.Println("Class is the wrong type")
         }
         u32SelKeys :=[]netlink.TcU32Key{
               
@@ -211,22 +225,11 @@ func DoNetworking(args *skel.CmdArgs, conf NetConf, result *current.Result, logg
                 Actions: []netlink.Action{},
         }
 
-        cFilter := *filter
         if err := netlink.FilterAdd(filter); err != nil {
                 fmt.Println("add filter err")
         }
-        if !reflect.DeepEqual(cFilter, *filter) {
-                fmt.Println("U32 %v and %v are not equal", cFilter, *filter)
-        }
 
-        filters, err := netlink.FilterList(contVeth, qdiscHandle)
-        if err != nil {
-                fmt.Println("filter list err")
-        }
-        if len(filters) != 1 {
-                fmt.Println("Failed to add filter")
-        }
-*/
+
 		// Now that the everything has been successfully set up in the container, move the "host" end of the
 		// veth into the host namespace.
 		if err = netlink.LinkSetNsFd(hostVeth, int(hostNS.Fd())); err != nil {
@@ -266,9 +269,9 @@ func DoNetworking(args *skel.CmdArgs, conf NetConf, result *current.Result, logg
      }
              
              //ingress_bandwidth = "123456"
-             logger.Infof("lj: %s  HELLO", ingress_bandwidth)
+  //           logger.Infof("lj: %s  HELLO", ingress_bandwidth)
               
-	     Rate1, err := strconv.Atoi(ingress_bandwidth)
+/*	     Rate1, err := strconv.Atoi(ingress_bandwidth)
                 if err != nil {
 		 fmt.Println("convert fail")
 	 }
@@ -284,10 +287,10 @@ func DoNetworking(args *skel.CmdArgs, conf NetConf, result *current.Result, logg
 	        if Rate2<0 {
 			fmt.Println("rate2 error")
 		}
-
-	//	Rate1=5000000
-	//	Rate2=5000000
-	logger.Infof("lj speed: %s", Rate1)
+*/
+//		Rate1=5000000
+//		Rate2=5000000
+//	logger.Infof("lj speed: %s", Rate1)
                 
                	index1 := hostVeth.Attrs().Index
 		qdiscHandle1 := netlink.MakeHandle(0x1, 0x0)
@@ -334,7 +337,7 @@ func DoNetworking(args *skel.CmdArgs, conf NetConf, result *current.Result, logg
                 Handle:    classId2,
         }
         htbClassAttrs2 := netlink.HtbClassAttrs{
-                Rate:   uint64(Rate2),
+                Rate:   uint64(Rate1),
                 Buffer: 320000 * 1024,
         }
         htbClass2 := netlink.NewHtbClass(classAttrs2, htbClassAttrs2)
