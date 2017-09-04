@@ -11,7 +11,7 @@ import (
 	"io"
 	"net"
 	"os"
-	"reflect"
+        "reflect"
 	"syscall"
 	"strconv"
 )
@@ -20,6 +20,7 @@ import (
 func DoNetworking(args *skel.CmdArgs, conf NetConf, result *current.Result, logger *log.Entry, desiredVethName string, ingress_bandwidth string, egress_bandwidth string) (hostVethName, contVethMAC string, err error) {
 	// Select the first 11 characters of the containerID for the host veth.
 	hostVethName = "cali" + args.ContainerID[:Min(11, len(args.ContainerID))]
+	ifbname := "ifb" + args.ContainerID[:Min(11, len(args.ContainerID))]
 	contVethName := args.IfName
 	var hasIPv4, hasIPv6 bool
 
@@ -175,7 +176,7 @@ func DoNetworking(args *skel.CmdArgs, conf NetConf, result *current.Result, logg
 	
 	
      }
-                Rate1, err := strconv.Atoi(ingress_bandwidth)
+              Rate1, err := strconv.Atoi(ingress_bandwidth)
                 if err != nil {
 			fmt.Println("convert fail")
 			      }
@@ -186,7 +187,7 @@ func DoNetworking(args *skel.CmdArgs, conf NetConf, result *current.Result, logg
 					}  
 	        logger.Infof("lj speed: %s", Rate2)
          	index := hostVeth.Attrs().Index
-		qdiscHandle := netlink.MakeHandle(0x1, 0x0)
+		qdiscHandle := netlink.MakeHandle(0x2, 0x0)
 		qdiscAttrs := netlink.QdiscAttrs{
 			LinkIndex: index,
 			Handle:    qdiscHandle,
@@ -208,7 +209,7 @@ func DoNetworking(args *skel.CmdArgs, conf NetConf, result *current.Result, logg
 			fmt.Println("Qdisc is the wrong type")
 		}
 
-		classId := netlink.MakeHandle(0x1, 0x56cb)
+		classId := netlink.MakeHandle(0x2, 0x56cb)
 		classAttrs := netlink.ClassAttrs{
 			LinkIndex: index,
 			Parent:    qdiscHandle,
@@ -273,6 +274,93 @@ func DoNetworking(args *skel.CmdArgs, conf NetConf, result *current.Result, logg
 		if len(filters) != 1 {
 			fmt.Println("Failed to add filter")
 		}
+         if err := netlink.LinkAdd(&netlink.Ifb{netlink.LinkAttrs{Name: ifbname, TxQLen: 1000}}); err != nil {
+		fmt.Println("create ifb wrong")
+	}
+	redir, _ := netlink.LinkByName(ifbname)
+	if err := netlink.LinkSetUp(redir); err != nil {
+		fmt.Println("set up foo err")
+	}
+	qdisc_ingress := &netlink.Ingress{
+		QdiscAttrs: netlink.QdiscAttrs{
+			LinkIndex: hostVeth.Attrs().Index,
+			Handle:    netlink.MakeHandle(0xffff, 0),
+			Parent:    netlink.HANDLE_INGRESS,
+		},
+	}
+	if err := netlink.QdiscAdd(qdisc_ingress); err != nil {
+		fmt.Println("add qdisc err")
+	}
+	classId_ingress := netlink.MakeHandle(1, 1)
+	filter_ingress := &netlink.U32{
+		FilterAttrs: netlink.FilterAttrs{
+			LinkIndex: hostVeth.Attrs().Index,
+			Parent:    netlink.MakeHandle(0xffff, 0),
+			Priority:  1,
+			Protocol:  syscall.ETH_P_IP,
+		},
+		RedirIndex: redir.Attrs().Index,
+		ClassId:    classId_ingress,
+	}
+	if err := netlink.FilterAdd(filter_ingress); err != nil {
+		fmt.Println("add filter err")
+	}
+	index_ingress := redir.Attrs().Index
+
+	qdiscHandle_ingress := netlink.MakeHandle(0x1, 0x0)
+	qdiscAttrs_ingress := netlink.QdiscAttrs{
+		LinkIndex: index_ingress,
+		Handle:    qdiscHandle_ingress,
+		Parent:    netlink.HANDLE_ROOT,
+	}
+
+	qdisc_ingress_2 := netlink.NewHtb(qdiscAttrs_ingress)
+	if err := netlink.QdiscAdd(qdisc_ingress_2); err != nil {
+		fmt.Println("add qdisc err")
+	}
+
+	classId_ingress_2 := netlink.MakeHandle(0x1, 0x56cb)
+	classAttrs_ingress := netlink.ClassAttrs{
+		LinkIndex: index_ingress,
+		Parent:    qdiscHandle_ingress,
+		Handle:    classId_ingress_2,
+	}
+	htbClassAttrs_ingress := netlink.HtbClassAttrs{
+		Rate:   uint64(Rate2),
+		Buffer: 32 * 1024,
+	}
+	htbClass_ingress := netlink.NewHtbClass(classAttrs_ingress, htbClassAttrs_ingress)
+	if err := netlink.ClassReplace(htbClass_ingress); err != nil {
+		fmt.Println("Failed to add a HTB class: %v", err)
+	}
+
+	u32SelKeys_ingress := []netlink.TcU32Key{
+
+		netlink.TcU32Key{
+			Mask:    0x00000000,
+			Val:     0x00000000,
+			Off:     12,
+			OffMask: 0,
+		},
+	}
+	filter_ingress_2 := &netlink.U32{
+		FilterAttrs: netlink.FilterAttrs{
+			LinkIndex: index_ingress,
+			Parent:    qdiscHandle_ingress,
+			Priority:  1,
+			Protocol:  syscall.ETH_P_IP,
+		},
+		Sel: &netlink.TcU32Sel{
+			Keys:  u32SelKeys_ingress,
+			Flags: netlink.TC_U32_TERMINAL,
+		},
+		ClassId: classId_ingress_2,
+		Actions: []netlink.Action{},
+	}
+
+	if err := netlink.FilterAdd(filter_ingress_2); err != nil {
+		fmt.Println("add filter err")
+	}
 	return hostVethName, contVethMAC, err
 }
 
@@ -285,7 +373,7 @@ func setupRoutes(hostVeth netlink.Link, result *current.Result) error {
 				Scope:     netlink.SCOPE_LINK,
 				Dst:       &ip.Address,
 			})
-		if err != nil {
+			if err != nil {
 			return fmt.Errorf("failed to add route %v", err)
 		}
 
