@@ -280,7 +280,7 @@ func CmdAddK8s(args *skel.CmdArgs, conf utils.NetConf, nodename string, calicoCl
 
 	// Whether the endpoint existed or not, the veth needs (re)creating.
 	hostVethName := k8sbackend.VethNameForWorkload(workload)
-	_, contVethMac, err := utils.DoNetworking(args, conf, result, logger, hostVethName, ingress_bandwidth,egress_bandwidth)
+	_, contVethMac, err := utils.DoNetworking(args, conf, result, logger, hostVethName, ingress_bandwidth, egress_bandwidth)
 	if err != nil {
 		// Cleanup IP allocation and return the error.
 		logger.Errorf("Error setting up networking: %s", err)
